@@ -19,7 +19,6 @@ from starlette.background import BackgroundTask
 from workflows import Context
 from workflows.context import JsonSerializer
 from workflows.handler import WorkflowHandler
-from llama_index.core.agent.workflow.workflow_events import AgentOutput
 
 from llama_deploy.apiserver.deployment import Deployment
 from llama_deploy.apiserver.deployment_config_parser import DeploymentConfig
@@ -202,7 +201,7 @@ async def get_task_result(
 
     handler = deployment._handlers[task_id]
     result = await handler
-    if isinstance(result, AgentOutput):
+    if not isinstance(result, str):
         result = str(result)
     return TaskResult(task_id=task_id, history=[], result=result)
 
