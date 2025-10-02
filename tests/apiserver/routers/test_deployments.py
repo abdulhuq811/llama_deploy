@@ -11,6 +11,8 @@ import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
+from llama_index.core.agent.workflow import AgentOutput
+from llama_index.core.base.llms.types import ChatMessage
 from workflows.context import JsonSerializer
 from workflows.events import Event
 
@@ -148,6 +150,13 @@ def test_run_deployment_task(
     )
     assert response.status_code == 200
 
+    deployment.reset_mock()
+    response = http_client.post(
+        "/deployments/test-deployment/tasks/run/",
+        json={"input": "{}", "session_id": "84"},
+    )
+    assert response.status_code == 200
+
 
 def test_create_deployment_task(
     http_client: TestClient, data_path: Path, mock_manager: MagicMock
@@ -172,6 +181,13 @@ def test_create_deployment_task(
         "/deployments/test-deployment/tasks/create/",
         json={"input": "{}"},
         params={"session_id": 84},
+    )
+    assert response.status_code == 200
+
+    deployment.reset_mock()
+    response = http_client.post(
+        "/deployments/test-deployment/tasks/create/",
+        json={"input": "{}", "session_id": "84"},
     )
     assert response.status_code == 200
 
@@ -222,6 +238,15 @@ def test_get_event_not_found(
     http_client: TestClient, data_path: Path, mock_manager: MagicMock
 ) -> None:
     mock_manager.get_deployment.return_value = None
+    response = http_client.get(
+        "/deployments/test-deployment/tasks/test_task_id/events",
+        params={"session_id": "42", "task_id": "84"},
+    )
+    assert response.status_code == 404
+
+    deployment = mock.AsyncMock()
+    deployment._handlers = {}
+    mock_manager.get_deployment.return_value = deployment
     response = http_client.get(
         "/deployments/test-deployment/tasks/test_task_id/events",
         params={"session_id": "42", "task_id": "84"},
@@ -368,6 +393,30 @@ def test_get_task_result(
 
     mock_handler = MockHandler()
     deployment._handlers = {"test_task_id": mock_handler}
+
+    mock_manager.get_deployment.return_value = deployment
+
+    response = http_client.get(
+        "/deployments/test-deployment/tasks/test_task_id/results/?session_id=42",
+    )
+    assert response.status_code == 200
+    assert TaskResult(**response.json()).result == "test_result"
+
+    # Mock the handler to return an AgentOutput
+    class MockAgentOutputHandler:
+        def __await__(self):  # type:ignore
+            async def await_impl():  # type:ignore
+                return AgentOutput(
+                    response=ChatMessage(content="test_result"),
+                    current_agent_name="test_agent",
+                    tool_calls=[],
+                    raw=None,
+                )
+
+            return await_impl().__await__()
+
+    mock_agent_output_handler = MockAgentOutputHandler()
+    deployment._handlers = {"test_task_id": mock_agent_output_handler}
 
     mock_manager.get_deployment.return_value = deployment
 

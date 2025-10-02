@@ -19,6 +19,7 @@ from starlette.background import BackgroundTask
 from workflows import Context
 from workflows.context import JsonSerializer
 from workflows.handler import WorkflowHandler
+from llama_index.core.agent.workflow.workflow_events import AgentOutput
 
 from llama_deploy.apiserver.deployment import Deployment
 from llama_deploy.apiserver.deployment_config_parser import DeploymentConfig
@@ -96,6 +97,7 @@ async def create_deployment_task(
         )
 
     run_kwargs = json.loads(task_definition.input) if task_definition.input else {}
+    session_id = session_id or task_definition.session_id
     result = await deployment.run_workflow(
         service_id=service_id, session_id=session_id, **run_kwargs
     )
@@ -123,6 +125,7 @@ async def create_deployment_task_nowait(
         )
 
     run_kwargs = json.loads(task_definition.input) if task_definition.input else {}
+    session_id = session_id or task_definition.session_id
     handler_id, session_id = deployment.run_workflow_no_wait(
         service_id=service_id, session_id=session_id, **run_kwargs
     )
@@ -176,8 +179,15 @@ async def get_events(
             await asyncio.sleep(0.01)
         await handler
 
+    try:
+        deployment_handler = deployment._handlers[task_id]
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail="Task not found in deployment handlers"
+        )
+
     return StreamingResponse(
-        event_stream(deployment._handlers[task_id]),
+        event_stream(deployment_handler),
         media_type="application/x-ndjson",
     )
 
@@ -191,7 +201,10 @@ async def get_task_result(
     """Get the task result associated with a task and session."""
 
     handler = deployment._handlers[task_id]
-    return TaskResult(task_id=task_id, history=[], result=await handler)
+    result = await handler
+    if isinstance(result, AgentOutput):
+        result = str(result)
+    return TaskResult(task_id=task_id, history=[], result=result)
 
 
 @deployments_router.get("/{deployment_name}/tasks")
