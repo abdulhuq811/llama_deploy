@@ -181,9 +181,7 @@ async def get_events(
     try:
         deployment_handler = deployment._handlers[task_id]
     except KeyError:
-        raise HTTPException(
-            status_code=404, detail="Task not found in deployment handlers"
-        )
+        raise HTTPException(status_code=404, detail="Task not found")
 
     return StreamingResponse(
         event_stream(deployment_handler),
@@ -199,11 +197,26 @@ async def get_task_result(
 ) -> TaskResult | None:
     """Get the task result associated with a task and session."""
 
-    handler = deployment._handlers[task_id]
+    try:
+        handler = deployment._handlers[task_id]
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Task not found")
     result = await handler
     if not isinstance(result, str):
         result = str(result)
     return TaskResult(task_id=task_id, history=[], result=result)
+
+
+@deployments_router.post("/{deployment_name}/tasks/delete")
+async def delete_task(
+    deployment: Annotated[Deployment, Depends(deployment)], task_id: str
+) -> None:
+    """Get the active sessions in a deployment and service."""
+
+    if task_id not in deployment._handlers:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    deployment._handlers.pop(task_id)  # noqa: ignore
 
 
 @deployments_router.get("/{deployment_name}/tasks")
@@ -236,6 +249,9 @@ async def get_session(
 ) -> SessionDefinition:
     """Get the definition of a session by ID."""
 
+    if session_id not in deployment._contexts:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     return SessionDefinition(session_id=session_id)
 
 
@@ -257,6 +273,9 @@ async def delete_session(
     deployment: Annotated[Deployment, Depends(deployment)], session_id: str
 ) -> None:
     """Get the active sessions in a deployment and service."""
+
+    if session_id not in deployment._contexts:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     deployment._contexts.pop(session_id)
 
