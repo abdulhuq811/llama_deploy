@@ -217,6 +217,7 @@ async def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     deployment._handlers.pop(task_id)  # noqa: ignore
+    deployment._handler_inputs.pop(task_id, None)  # noqa: ignore
 
 
 @deployments_router.get("/{deployment_name}/tasks")

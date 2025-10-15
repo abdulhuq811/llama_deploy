@@ -449,12 +449,15 @@ def test_delete_task(
     deployment = mock.AsyncMock()
     deployment.default_service = "TestService"
     deployment._handlers = {"42": mock.MagicMock()}  # Mock handlers to be deleted
+    deployment._handler_inputs = {"42": "foo"}
     mock_manager.get_deployment.return_value = deployment
 
     response = http_client.post(
         "/deployments/test-deployment/tasks/delete/?task_id=42",
     )
     assert response.status_code == 200
+    assert "42" not in deployment._handlers
+    assert "42" not in deployment._handler_inputs
 
 
 def test_get_sessions_not_found(
